@@ -1,0 +1,49 @@
+#!/bin/sh
+
+set -e
+
+####################---Checking .env file---####################
+echo "###---Checking .env file ..."
+if [ ! -f ".env" ]; then
+    echo "#####--ERROR: .env file not found - EXITING..."
+    exit 1
+fi
+echo "-- .env file is ok."
+
+###############---Setting Permissions for Log Folder---###############
+if [ -d "storage" ]; then
+    echo "--storage folder is found."
+else
+    echo "#####--ERROR: storage folder was not found, please check if the storage volume is properly mounted - EXITING..."
+    exit 1
+fi
+
+####################---Artisan Commands---####################
+echo "###--Running Artisan Commands:"
+
+echo "--Running Composer..."
+composer install --no-dev --no-suggest
+
+if [ -z "$(cat .env | grep -w APP_KEY | cut -d"=" -f2)" ]; then
+    echo "--Creating APP_KEY..."
+    php artisan key:generate
+else
+    echo "--APP_KEY has already been set."
+fi
+
+echo "--Setting JWT..."
+grep -e "^JWT_SECRET=\\S\{64\}" -q .env || php artisan jwt:secret -f -q
+echo "--JWT is set"
+
+echo "--Creating JWT Keys..."
+if [ ! -f "storage/oauth-private.key" ]; then
+    php artisan passport:install -f -q
+fi
+echo "--JWT is set"
+
+echo "--Running database migrations ..."
+php artisan migrate
+
+echo '###---Application has been built, starting ...'
+
+sudo -E docker-php-entrypoint apache2-foreground
